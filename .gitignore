@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.*
+!.env.example
+
+# Playwright output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+.auth/
+
+# Tooling / OS
+.agentic-qe/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
