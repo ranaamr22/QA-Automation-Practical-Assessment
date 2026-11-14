@@ -79,7 +79,7 @@ test.describe('API - booking cancellation', { tag: ['@api', '@cancellation'] }, 
     expect(body.error).toContain('EVT-ZZZZZZ');
   });
 
-  /** PO question Q9: can the same customer re-book after cancelling? Verifies it is not blocked. */
+  /** Can the same customer re-book after cancelling? Verifies it is not blocked. */
   test('the same customer can book the same event again after cancelling', async ({ api, seedBooking, bookableEvent }) => {
     const first = await seedBooking();
     expectStatus(await api.bookings.cancel(first.id), 200);

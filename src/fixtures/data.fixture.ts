@@ -37,8 +37,8 @@ export const test = apiTest.extend<DataFixtures>({
     }
   },
 
-  // Declared to depend on bookingTracker so it is torn down FIRST: bookings are cancelled
-  // (seats released) before their events are deleted.
+  // Declared to depend on bookingTracker so it is torn down FIRST: events are deleted
+  // (removing their bookings) before the bookingTracker teardown cancels any that remain.
   eventTracker: async ({ api, bookingTracker }, use, testInfo) => {
     void bookingTracker;
     const tracker = new EventTracker();

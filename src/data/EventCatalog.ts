@@ -20,7 +20,7 @@ export class EventCatalog {
     return event;
   }
 
-  /** Up to `count` bookable events with DISTINCT prices (for multi-price scenarios, AC9). */
+  /** Up to `count` bookable events with DISTINCT prices (for multi-price scenarios). */
   async withDistinctPrices(count: number, minSeats: number = QUANTITY.MAX): Promise<EventModel[]> {
     const candidates = await this.candidates(minSeats);
     const byPrice = new Map<number, EventModel>();

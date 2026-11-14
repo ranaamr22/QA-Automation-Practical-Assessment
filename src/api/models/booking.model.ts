@@ -32,8 +32,8 @@ export const BookingListResponseSchema = list(BookingSchema);
 export const CancelBookingResponseSchema = z.object({ success: z.literal(true), message: z.string().optional() });
 
 /**
- * Request model for POST /bookings. Every field is typed loosely on purpose (`unknown`-friendly
- * overrides) so negative tests can send wrong types *through the same client* instead of bypassing it.
+ * Strictly typed request model for POST /bookings. Negative tests that need to send wrong types use
+ * the separate `RawBookingPayload` so they still go *through the same client* instead of bypassing it.
  */
 export interface CreateBookingRequest {
   eventId: number;

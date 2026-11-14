@@ -82,7 +82,7 @@ test.describe('API - create booking (POST /bookings)', { tag: ['@api', '@booking
   });
 
   /**
-   * Characterisation of duplicate submissions (PO question Q7). There is no idempotency key in the API.
+   * Characterisation of duplicate submissions. There is no idempotency key in the API.
    * Either outcome is accepted, the observed one is recorded, so a behaviour change is visible in reports.
    */
   test('identical consecutive submissions: duplicate handling is characterised', { tag: '@duplicate' }, async ({

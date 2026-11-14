@@ -17,7 +17,7 @@ export async function availableSeats(api: EventHubApi, eventId: number): Promise
  * Asserts that `act` changes an event's available seats by exactly `expectedChange`.
  * The counter is read immediately before and after the action, so only a change by another user inside
  * that short window can interfere. If the change differs, the whole measurement is repeated with a fresh
- * action (`prepare` + `act`). A real defect fails every attempt; random interference does not repeat.
+ * action (`prepare` + `act`).
  */
 export async function expectSeatChange<T = void>(options: {
   api: EventHubApi;

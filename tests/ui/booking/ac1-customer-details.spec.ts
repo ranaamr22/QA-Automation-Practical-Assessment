@@ -104,7 +104,6 @@ test.describe('US-114 · AC1 · Customer details', { tag: ['@ui', '@ac1', '@vali
     ];
     for (const { id, field, value, why, bug } of RULE_GAPS) {
       test(`[AC1-CUS-${id}] rejects the ${field} "${value}" (${why})`, { tag: ['@negative', '@known-defect'] }, async ({ eventPage }) => {
-        // an unexpected pass means the bug was fixed -> remove this line.
         test.fail(true, `${bug}: ${field} "${value}" is accepted`);
         await eventPage.customer.fill(buildCustomer({ [field]: value }));
         await eventPage.confirmButton.click();

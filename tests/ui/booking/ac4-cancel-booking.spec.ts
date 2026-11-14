@@ -6,7 +6,7 @@ import { expect, test } from '@src/fixtures';
  *
  * Bookings are arranged via the API (creation in the UI is covered by AC1/AC3) to keep each test
  * focused on cancellation. The app's cancel semantics (hard delete vs. status "cancelled") are not
- * specified - `expectBookingCancelled` accepts both and reports which one happened (README Q3).
+ * specified - `expectBookingCancelled` accepts both and reports which one happened.
  */
 test.describe('US-114 · AC4 · Cancel booking', { tag: ['@ui', '@ac4', '@cancellation'] }, () => {
   test('[AC4-CAN-01] cancels a booking from My Bookings after confirming the dialog', { tag: '@smoke' }, async ({

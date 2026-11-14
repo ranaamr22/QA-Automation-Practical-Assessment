@@ -14,7 +14,7 @@ import { credentials, env, type Credentials } from '@src/config/env';
  *
  *   base:  qa.engineer@example.com
  *   w0:    qa.engineer+ci-ui-w0@example.com
- *   other: qa.engineer+ci-ui-isolation@example.com  (second user for data-isolation tests)
+ *   other: qa.engineer+ci-ui-iso0@example.com  (second user for data-isolation tests)
  */
 export interface TestAccount extends Credentials {
   /** Human readable role, used in logs instead of the e-mail. */
