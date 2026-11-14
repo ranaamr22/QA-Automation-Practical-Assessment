@@ -1,0 +1,121 @@
+name: EventHub E2E
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# All runs hit ONE shared public environment and reuse the same derived sandbox accounts.
+# Serialising runs repo-wide prevents two pipelines from evicting each other's bookings
+# (sandbox limit: 9 bookings, oldest silently replaced). Queued runs wait instead of being cancelled.
+concurrency:
+  group: eventhub-shared-environment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CI: 'true'
+  NODE_VERSION: '22'
+  # Secrets are only ever exposed as env vars to the test process; the framework never prints them
+  # (API diagnostics are redacted). GitHub additionally masks them in logs.
+  EVENTHUB_EMAIL: ${{ secrets.EVENTHUB_EMAIL }}
+  EVENTHUB_PASSWORD: ${{ secrets.EVENTHUB_PASSWORD }}
+  EVENTHUB_BASE_URL: ${{ vars.EVENTHUB_BASE_URL || 'https://eventhub.rahulshettyacademy.com' }}
+  EVENTHUB_API_URL: ${{ vars.EVENTHUB_API_URL || 'https://api.eventhub.rahulshettyacademy.com/api' }}
+
+jobs:
+  static-checks:
+    name: Typecheck & test discovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      has-credentials: ${{ steps.creds.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Discover tests (no execution)
+        run: npx playwright test --list
+      - name: Check credentials are configured
+        id: creds
+        run: |
+          if [ -n "$EVENTHUB_EMAIL" ] && [ -n "$EVENTHUB_PASSWORD" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::EVENTHUB_EMAIL / EVENTHUB_PASSWORD secrets are not available (e.g. fork PR). E2E jobs are skipped."
+          fi
+
+  api:
+    name: API tests
+    needs: static-checks
+    if: needs.static-checks.outputs.has-credentials == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      EVENTHUB_ACCOUNT_NAMESPACE: ci-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      # No browser needed: the api project only uses Playwright's APIRequestContext.
+      - name: Run API tests
+        run: npx playwright test --project=api
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-api
+          path: playwright-report/
+          retention-days: 14
+      - name: Upload failure artifacts (API exchanges, JUnit)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-api
+          path: test-results/
+          retention-days: 14
+
+  ui:
+    name: UI tests (US-114 booking, component + E2E)
+    needs: static-checks
+    if: needs.static-checks.outputs.has-credentials == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      EVENTHUB_ACCOUNT_NAMESPACE: ci-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - name: Install Chromium and OS dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Run UI tests
+        run: npx playwright test --project=ui
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-ui
+          path: playwright-report/
+          retention-days: 14
+      - name: Upload failure artifacts (traces, screenshots, videos)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-ui
+          path: test-results/
+          retention-days: 14
