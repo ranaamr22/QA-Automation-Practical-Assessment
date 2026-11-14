@@ -22,7 +22,7 @@ UI and API test automation for the booking flow of **EventHub**, built with **Pl
 | AC5 | Same behaviour via `POST /api/bookings` | `tests/api/*` + `tests/ui/booking/ac5-ui-api-consistency` |
 | – | The steps chained as real user journeys | `tests/ui/booking/e2e-booking-journeys`, `tests/api/e2e-api-journeys` |
 
-**Out of scope (agreed):** sign-in/registration UI and the `/auth` endpoints, event management,
+**Out of scope (chosen):** sign-in/registration UI and the `/auth` endpoints, event management,
 the events search page, accessibility and responsive testing. Login is handled once, as infrastructure.
 `POST/DELETE /events` are used **only as test setup** (e.g. an event with exactly 8 seats) and the events are deleted afterwards.
 
@@ -31,8 +31,7 @@ the events search page, accessibility and responsive testing. Login is handled o
 | Concern | Choice | Why |
 |---|---|---|
 | UI + API automation | Playwright Test + TypeScript | One runner, language and report for both layers. UI and API share the same login session, so UI↔API checks need no extra plumbing. A second toolchain (RestAssured/Java) would duplicate auth and data handling without adding coverage. |
-| Response contracts | zod | One definition gives the TypeScript type and the runtime schema check. |
-| Configuration | dotenv + zod | `.env` locally, secrets in CI; invalid configuration fails at start-up. |
+| Configuration | dotenv | `.env` locally, secrets in CI; invalid configuration fails at start-up. |
 
 ## 3. Project structure
 
@@ -54,7 +53,6 @@ tests/
   ui/booking/  ac1-* · ac2-total-price · ac3-my-bookings · ac4-cancel-booking · ac5-ui-api-consistency · e2e-booking-journeys
 ```
 
-Specs contain intent and assertions only – no selectors, login code or raw HTTP.
 
 ## 4. Setup
 
@@ -63,14 +61,13 @@ Prerequisites: Node.js ≥ 20 (CI uses 22).
 ```bash
 npm ci
 npx playwright install --with-deps chromium   # needed for the ui project only
-cp .env.example .env                           # then add the credentials (section 5)
-npm run typecheck
-npm run test:list                              # lists the tests without running them
+# create a .env file with your credentials (see section 5)
+npx playwright test --workers=1
 ```
 
 ## 5. Credentials and environment variables
 
-The tests need **one EventHub account**, configured in `.env` (git-ignored):
+The tests need **one EventHub account**, configured in `.env`:
 
 ```
 EVENTHUB_EMAIL=you@example.com
@@ -79,8 +76,6 @@ EVENTHUB_PASSWORD=YourPassw0rd!
 
 - Any address works: if the login is rejected, the framework registers the account automatically.
   The password must meet the app rule (≥ 8 characters, upper-case letter, digit, symbol).
-- Locally, worker 0 uses this account as is. Extra workers and the second user needed for the
-  data-isolation test use derived addresses (`you+local-w1@…`, `you+local-iso0@…`), registered automatically.
 - In CI the same two values come from the repository secrets `EVENTHUB_EMAIL` and `EVENTHUB_PASSWORD`.
 - Real credentials are never committed or logged: API exchanges are redacted before they reach logs or reports.
 
@@ -90,7 +85,6 @@ EVENTHUB_PASSWORD=YourPassw0rd!
 | `EVENTHUB_BASE_URL` / `EVENTHUB_API_URL` | production URLs | Target environment |
 | `EVENTHUB_ACCOUNT_STRATEGY` | `per-worker` | `shared` = every worker uses the base account (run with `--workers=1`) |
 | `EVENTHUB_ACCOUNT_NAMESPACE` | `local` | Keeps derived accounts of concurrent runs apart (CI: `ci-api`, `ci-ui`) |
-| `EVENTHUB_AUTO_REGISTER` | `true` | Register an account when its login is rejected |
 | `DEBUG_API` | `0` | `1` prints every redacted API exchange |
 
 ## 6. Running the tests
@@ -99,7 +93,7 @@ EVENTHUB_PASSWORD=YourPassw0rd!
 > Locally use `--workers=1` so that only your own account is used.
 
 ```bash
-npx playwright test --workers=1                        # everything (≈15 min)
+npx playwright test --workers=1                        # everything
 npm run test:api -- --workers=1                        # API suite, no browser
 npm run test:ui -- --workers=1                         # UI suite
 npm run test:e2e -- --workers=1                        # the 6 UI end-to-end journeys
@@ -122,14 +116,11 @@ Without secrets (e.g. fork PRs) the test jobs are skipped with a warning.
 
 | Decision | Reason |
 |---|---|
-| **One sandbox account per worker** (plus-addressing, keyed by `parallelIndex`) | The app keeps at most 9 bookings per account and silently replaces the oldest; a shared account would make parallel tests evict each other's bookings. |
 | **Login via API, token injected into the browser** (`localStorage.eventhub_token`) | Same mechanism as the app's own login; fast and stable; UI and API act as the same user. Token refresh and a single re-try on 401 are handled centrally. |
 | **Layered fixtures, page objects built from components** | Explicit dependencies and teardown order; a markup change is fixed in one class. |
 | **Locators:** role/label/text → `data-testid` → minimal CSS | No XPath. The few CSS hooks left are listed as test-id requests (section 11). |
-| **Expected values come from the API**, never from the page under test | A page that is consistently wrong cannot pass. |
 | **Seat counts are asserted dynamically** (`src/assertions/seat.assertions.ts`) | Featured events are shared by every user of the public site, so their seat counters move during a run. Seat changes are measured with API reads immediately before and after the action; repeatable API checks retry with a fresh action if another user interfered; the event page is compared with the live API value. The assertions stay exact (−3 means −3). |
-| **Ambiguous contracts handled in one helper** (`expectBookingCancelled`) | Cancel semantics are contradictory (D3); both are accepted, the observed one is annotated, anything else fails. |
-| **Two test levels** – one behaviour per AC test (preconditions via API) + UI-only journeys | A component failure points at one feature; a journey failure shows which hand-off broke. |
+| **Layered testing** – one behaviour-per-AC test with preconditions provisioned through the API, complemented by UI-only journeys | A granular test failure identifies the specific feature at fault; a journey failure indicates which hand-off between steps failed. |
 | **Traceable IDs and tags** – `[AC1-QTY-04]`, `@ac1 … @ac5 @e2e @smoke @negative @boundary @security @known-defect` | Every test maps to an AC; selective runs via `--grep`. |
 | **Confirmed bugs as expected failures** (`test.fail()` + `@known-defect`) | The tests assert the correct behaviour; the suite stays green and a test turns red the day its bug is fixed. |
 
@@ -138,7 +129,6 @@ properties and deleted afterwards. Customer data is unique and uses `@example.co
 Each test cancels/deletes what it created, even on failure. The `cleanup` project then sweeps the framework's
 accounts for suite-marked leftovers of this run and of earlier runs older than 60 minutes. Never touched:
 other users' data, featured events, bookings not created by the suite, and the undocumented `DELETE /bookings` (clear-all) endpoint.
-`AC3-MYB-07` (9-booking cap) skips itself if the account holds bookings not created by the suite, so real bookings are never evicted.
 
 ## 8. Coverage overview
 
@@ -150,7 +140,7 @@ other users' data, featured events, bookings not created by the suite, and the u
 | AC1 · Ticket quantity | AC1-QTY-01…10 | 14 | 1–10 tickets, never more than seats left (8 seats → max 8, bookable); sold-out state |
 | AC1 · Customer details | AC1-CUS-01…30 | 30 | Name/e-mail/phone validation, no request on invalid input, XSS shown as text; 12 bug-hunt cases |
 | AC1 · Confirm booking | AC1-CNF-01…05 | 5 | Confirmation content, double click, network failure, seats taken meanwhile, refresh |
-| AC2 · Total price | AC2-PRC-01…08 | 8 | Total = price × tickets for all quantities and prices, $0 and $19.99 events |
+| AC2 · Total price | AC2-PRC-01…08 | 8 | Total = price × tickets for all quantities and prices |
 | AC3 · My Bookings | AC3-MYB-01…10 | 10 | Listed with full details, navigation, 9-booking cap, empty state, other users' bookings hidden |
 | AC4 · Cancel booking | AC4-CAN-01…04 | 4 | Confirmation dialog, dismiss keeps booking, only the selected one cancelled, seats released |
 | AC5 · UI ↔ API | AC5-API-01…02 | 2 | A UI booking is stored identically in the API (and seats drop); an API booking shows in the UI |
@@ -172,40 +162,33 @@ without duplicate · **E2E-06** booking cancelled via API shows as no longer act
 | events.read | 21 | Search/category/city filters, pagination, event details, invalid input |
 | e2e-api-journeys | 5 | Full lifecycle; sell-out and re-open; **two buyers racing for the last seats** (no over-selling); mistake then booking; two events independent |
 
-Every rejected request is also checked for "nothing was saved". Where the docs don't define a response, the API may
-reject or safely ignore the input – but never answer 500. Approach: risk-based (money, seat integrity, privacy deepest),
-equivalence classes and boundaries, each behaviour asserted once, mocks only where a live system can't produce the
-condition (network failure, empty My Bookings).
-
 ## 9. Story review
 
-**Gaps in the story:** the actor is a "visitor" but every page and endpoint requires login · no quantity limits, field
-rules, reference format or failure behaviour (AC1) · currency/rounding undefined (AC2) · ordering and the hidden
-9-booking cap undefined (AC3) · confirmation, resulting state and seat release on cancel undefined (AC4) · no error
-contract, idempotency or "same validation as the UI" rule (AC5).
+**Gaps in the story:** the actor is a "visitor", yet every page and endpoint requires login · AC1 leaves ticket
+limits, field rules and failure behaviour undefined· AC4 leaves confirmation and seat release on cancel undefined · AC5 defines no error contract,
+idempotency or "same validation as the UI" rule · accessibility and responsive behaviour are not specified at all.
 
-**Refined acceptance criteria (as automated)**
-- **AC1** A logged-in user selects 1–10 tickets (never more than the seats left), enters a name (≥ 2 characters), a valid e-mail and a phone with ≥ 10 digits, and after *Confirm Booking* sees a confirmation with booking reference, name, tickets and total. Invalid input sends no request; the button cannot double-submit; a failed request shows an error and keeps the data.
-- **AC2** The unit price is constant across quantities; total = unit × quantity, updated immediately; the API charges the exact amount.
-- **AC3** The booking is listed in My Bookings with reference, event, tickets, total and status; details are reachable; only the user's own bookings are visible.
-- **AC4** A booking is cancelled only after explicit confirmation; afterwards it is no longer active and its seats are released.
-- **AC5** A UI booking is stored identically in the API, an API booking appears in the UI, and the API enforces the booking rules itself.
+**Refined acceptance criteria**
+
+*Automated:*
+- **AC1 — Select & quantity:** A logged-in user books **1–10 tickets, never more than the seats left** (max = min(10, seats remaining)). Name (≥ 2 characters, trimmed), a valid e-mail and a phone of ≥ 10 digits are required; invalid input sends no request, the *Confirm Booking* button cannot double-submit, and a failed request shows an error while keeping the entered data. The confirmation shows reference, name, tickets and total.
+- **AC2 — Price:** The **single-ticket price is shown to the right of the "Book Tickets" title and does not change with quantity**; total = unit price × tickets, updated immediately; the API charges the exact amount.
+- **AC3 — My Bookings:** The booking is listed with reference, event, tickets, total and status; its details are reachable; only the user's own bookings are visible.
+- **AC4 — Cancel:** A booking is cancelled only after explicit confirmation; afterwards it is no longer active and its seats are released.
+- **AC5 — UI ↔ API parity:** A UI booking is stored identically via the API and vice-versa, and the API enforces the booking rules itself.
+
+*Proposed (not yet automated — see §1 out of scope):*
+- **AC6 — Accessibility:** The booking flow passes basic a11y checks: controls have accessible names, inputs are linked to their error messages, element ids are unique, and the flow is fully keyboard-operable.
+- **AC7 — Responsive:** The booking flow is usable across mobile, tablet and desktop viewports.
 
 **Questions for the Product Owner**
-1. Is the actor really an anonymous visitor? The product requires login.
-2. Cancellation: hard delete (API docs) or status `cancelled` (schema and UI)?
-3. Should prices with cents be shown with cents? The UI rounds to whole dollars.
-4. Maximum per booking: 10, or min(10, seats left)? (Implemented: the latter.)
-5. Is the 9-booking cap with silent eviction intended? Should users be warned?
-6. Should identical consecutive bookings be blocked (idempotency key)?
-7. Is there a cancellation deadline or refund rule?
-8. Phone rule: country-specific or "≥ 10 digits"? Maximum lengths for name and phone?
-9. Should the confirmation have its own URL (it is lost on refresh)?
-10. May past events be booked? (All featured events are dated in the past.)
+1. **Name rule:** min/max length, is trimming applied, and are digits-only or symbols-only names allowed?
+2. **E-mail rule:** which formats are valid or rejected (e.g. consecutive dots, trailing dot, sub-domains)?
+3. **Phone rule:** country-specific or "≥ 10 digits"? Is there a maximum length, and are separators/letters allowed?
+4. **Max bookings per user:** is there a limit on how many bookings a user can hold, and if the limit is reached, how should the system respond?
+5. **Limited seats:** when a user requests more tickets than remain, what is the expected behaviour — cap silently, block the request, or show a message?
 
-**Assumptions:** the actor is a logged-in user · either cancel semantics is acceptable (observed one reported) · the
-UI's validation rules are the agreed rules where the story is silent · 5xx responses are environment issues unless
-reproducible (then reported as bugs below).
+**Assumptions:** the actor is a logged-in user · the UI's validation rules are assumed to be the intended behaviour where the story is silent · 5xx responses are treated as environment issues unless reproducible (then reported below).
 
 ## 10. Confirmed bugs and discrepancies
 
@@ -224,27 +207,6 @@ Found on 2026-11-14. Each bug has tests that assert the expected behaviour and a
 | BUG-09 | Low | Documented page-size limit 1–100 not enforced | `?limit=101`, `?limit=-5` | Rejected or clamped → used as sent |
 | BUG-10 | Medium | Past events can be booked | event dated 2026-10-20 | 400 → 201 (while `POST /events` refuses past dates) |
 
-UI root cause (production bundle): name `name.length < 2` before trim; e-mail `/^[^\s@]+@[^\s@]+\.[^\s@]+$/`;
-phone only checks a *minimum* of 10 digits after stripping non-digits.
-
-| ID | Discrepancy (docs vs. live behaviour) | Handling |
-|---|---|---|
-| D1 | OpenAPI declares no security on `/events` and `/bookings`; the live API returns 401 without a token | Docs need fixing; not tested (auth out of scope) |
-| D2 | UI handles 403 for other users' bookings; docs list only 200/404/500 | Isolation tests accept 403 or 404, never 200 |
-| D3 | Cancel "permanently deletes" (docs) vs `status: cancelled` (schema, UI) | `expectBookingCancelled` accepts both (Q2) |
-| D4/D5 | API rejects letters in phones and blank names – stricter than the docs (`minLength` only) and different from the UI | Docs incomplete |
-| D7 | UI maximum is min(10, seats left); story says 10 | AC1-QTY-06/07 (Q4) |
-| D8/D9 | Undocumented `DELETE /bookings` (clear-all) and 9-booking cap exist only in the UI | Never used; per-worker accounts; AC3-MYB-07 (Q5) |
-| D10 | Amounts rounded to whole dollars ($19.99 × 3 shown as $60, charged $59.97) | AC2-PRC-07/08 (Q3) |
-| D12 | Confirmation has no URL and is lost on refresh | AC1-CNF-05 (Q9) |
-| D13 | `price` returned as a string although documented as number | Schemas accept both; annotated |
-| D15 | Featured events are dated in the past but listed as upcoming and bookable | Q10, BUG-10 |
-| D18 | Booking reference `D-4GCDSW` instead of documented `EVT-XXXXXX` | Pattern accepts both |
-| D19 | Unknown-user login returns 400, not the documented 404 | Auto-registration triggers on any rejected login |
-
-Accessibility observations (not automated – out of scope): the quantity buttons are named only "−"/"+", validation
-messages are not linked to their inputs, and every event card repeats `id="event-card"` / `id="book-now-btn"`.
-
 ## 11. Limitations and next steps
 
 **Limitations**
@@ -252,13 +214,8 @@ messages are not linked to their inputs, and every event card repeats `id="event
 - Shared public environment: featured events are changed by other users at any time. Seat assertions are measured
   immediately around each action (section 7), but another user's booking within that ~1-second window can still cause
   a rare failure (in CI it is absorbed by the single retry).
-- Latency, rate limits and resets of the public environment are outside our control.
-- The GitHub Actions workflow is in place but has not been run on GitHub yet (nothing has been pushed).
 
 **With more time**
-1. Run the workflow on GitHub and add a nightly schedule with Firefox/WebKit.
-2. Ask developers for `data-testid`s on ticket count, total, booking reference and confirmation rows.
-3. Validate every response against the published OpenAPI schema and diff the snapshot in CI.
-4. Add ESLint (`eslint-plugin-playwright`) and Prettier to the static checks (not added now to avoid new dependencies).
-5. Prefer future-dated events in `EventCatalog` once Q10 / BUG-10 is decided.
-6. A dedicated test environment with seeded data and a reset API – removes the shared-data uncertainty entirely.
+1. Extend coverage to adjacent flows — login/registration, event creation and cancellation, and similar journeys.
+2. Add accessibility checks and responsive-layout checks across mobile, tablet and desktop viewports.
+3. Produce a richer, more informative output report.
