@@ -70,8 +70,8 @@ npx playwright test --workers=1
 The tests need **one EventHub account**, configured in `.env`:
 
 ```
-EVENTHUB_EMAIL=you@example.com
-EVENTHUB_PASSWORD=YourPassw0rd!
+EVENTHUB_EMAIL=rana.qa.test01@gmail.com
+EVENTHUB_PASSWORD=EventHub@QA2026!Test
 ```
 
 - Any address works: if the login is rejected, the framework registers the account automatically.
